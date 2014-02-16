@@ -1,0 +1,197 @@
+
+Book kernel version: 2.6.11
+Referenced kernel version (the main one): 2.6.34.7
+
+
+=======================
+CHAPTER 1: INTRODUCTION
+=======================
+
+Linux kernel is monolithic (large kernel, with many functions than microkernel)
+
+In Linux, modules are object files which can be linked to (or unlinked from) the kernel at runtime.
+The modules don't run as separate processes, but are executed in kernel mode on behalf of the
+current process, like any other statically linked kernel function
+
+Device drivers are in the form of modules, which can be loaded and unloaded dynamically
+
+Processes of a multiuser system must be preemptable
+
+When a graphical display is activated, 1 process runs the window manager, and each window is run
+by a separate process. When a user creates a graphical shell, one process runs the graphical
+window(s) and a second process runs the shell. For each user command, the shell process creates
+another process to execute the corresponding program
+
+Unix-like OS adopt the process/kernel model: each process thinks that it's the only process on the
+machine, and it has exclusive access to the OS services
+
+Linux file types:
+- Regular file
+- Directory
+- Symbolic link
+- Block-oriented device file
+- Character-oriented device file
+- Pipe & named pipe (also called FIFO)
+- Socket
+Device files are related to I/O devices or device drivers. Pipes and sockets are special files used
+for interprocess communication (IPC)
+
+Beside user processes, Unix systems include a few privileged processes (called kernel threads):
+- Run in kernel mode, in kernel address space
+- Do not interact with users -> do not require terminal devices
+- Usually created during system startup and remain alive until the system is shut down
+
+Kernel routines can be activated in several ways:
+- A process invoke a system call
+- The CPU executing the process signals an exception. The kernel handles the exception on behalf
+  of the process that caused it
+- A peripheral device issues an interrupt signal, the kernel takes care of it with a program called
+  interrupt handler
+- A kernel thread is executed
+
+KERNEL REENTRANCY ----
+
+Reentrant vs Preemptive kernel: reentrant kernel means that many processes can be in kernel mode at
+the same time, while preemptive (or preemptible) kernel means that processes can be preempted while
+in kernel mode, in favor of another process. In other words, reentrancy is about the ability to
+contain many processes in kernel mode, and preemption is about the ability to hold the process from
+continueing (even against its will). One can say that reentrancy increases overall throughput, while
+preemption increases responsiveness
+
+To provide reentrancy:
+- Use reentrant functions (functions that only modify local variables and leave global data
+  structures alone)
+- Use locking mechanism (so nonreentrant functions are usable)
+
+Kernel control path (KCP): sequence of instructions executed by the kernel to handle a system call,
+an exeception or an interrupt. The CPU interleaves kernel control paths when:
+- A process invokes a system call but the corresponding KCP cannot be finished immediately ->
+  it invokes the scheduler to select a new process to run
+  (note: this is a case of a process voluntarily relinquishes the CPU)
+- The CPU detects an exception e.g. access to a page not present in RAM. The first KCP is suspended,
+  and the kernel executes a suitable procedure to handler the exception, then the first KCP
+  continues
+- A hardware interrupt occurs while the CPU is running a KCP with interrupts enabled
+  (notes: I think in this case, the interrupt handler is like a cleanup job. The process can
+  continue when the hardware request is being handled, and the interrupt handler can be called
+  without disrupting the current process flow)
+- An interrupt occurs while the CPU is running with kernel preemption enabled (compiled with this
+  option), and a higher priority process is runnable
+----
+
+A process in user mode refers to its private stack, data and code areas. When in kernel mode, it
+addresses the kernel data and code areas and uses another private stack
+
+Each KCP refers to its own private kernel stack
+
+Processes can share address space by explicitly requesting it, or automatically by the kernel (to
+reduce memory usage)
+
+Kernel contains many data structures that can't be accessed with a single (atomic) operations
+
+Simple solutions to synchronization problem on uniprocessor systems: disable preemption/disable
+interrupt. These aren't enough with multiprocessor systems -> requires other mechanism like
+semaphores and spin locks
+
+IPC ----
+
+Signals are used to notify processes of system events. 2 types of events:
+- Asynchronous: e.g. a user press interrupt keycode (usually Ctrl-C) at the terminal
+- Synchronous: e.g. the kernel sends SIGSEGV to a process when it accesses an invalid address
+
+Two possible ways for a process to specify a reaction to a signal:
+- Ignore it
+- Asynchronously execute a specified signal handler
+If it doesn't specify one, the kernel performs a default action (depends on the signal) out of the
+following five possibilities:
+- Terminate the process
+- Write the execution context and the contents of the address space to a file (core dump) and
+  terminate the process
+- Ignore the signal
+- Suspend the process
+- Resume the process's execution if it was stopped
+
+SIGKILL and SIGSTOP can't be directly handled by processes or ignored
+
+Other mechanisms: semaphores, message queues and shared memory
+----
+
+fork() and _exit() system calls are used for processes, while exec()-like system calls in invoked
+to load new programs
+
+Each data structure describing each process contains pointers to its parent and all its children
+
+When a process is terminated, it goes into the "zombie" state, until its parent calls wait4() (or
+waitpid()). The syscam call handler extracts data from the child process's process descriptor, then
+the descriptor is released
+When a process terminates, the kernel makes all of its children become the children of the "init"
+system process by changing the children's descriptor pointers. The "init" process monitor the
+execution of all its children and routinely issues wait4() system call to get rid of the orphaned
+zombies (abandoned by their real parents who didn't issue the wait4()/waitpid() system call)
+
+In modern Unix OS, many processes can be in a group (or job). Each process descriptor contains a
+field for the process group ID. Each group has a group leader (whose PID is the same as the process
+group ID). A newly created process is initially inserted into the process group of its parent
+Example: "$ ls | sort | more" -> the shell will create a new group for the 3 processes
+
+Modern Unix OS also introduce "login session", which contains all processes that are descendants
+of the process that started the working session on a terminal
+All processes of a process group must be in the same login session. A login session may have several
+groups active simultanously. One is always in the foreground (has access to the terminal), the
+others in the background
+
+Few MB in RAM are dedicated to storing the kernel image (kernel code and kernel static data
+structure), the remaining are usedin 3 possible ways:
+- To satisfy kernel requests for buffers, descriptors, other dynamic kernel data structures
+- To satisfy process requests
+- To get better performance (e.g. from disks) by means of cache
+
+The Kernel Memory Allocattor (KMA) is a subsystem that satisfies the requests for memory from all
+part of the system (kernel subsystems, user programs via system calls)
+
+Device drivers interact with the kernel through specific interfaces (so vendors can add new devices
+without knowing the internal kernel source code, but only the interface)
+
+When user programs wish to operate on hardware devices, they invoke system calls and refer to the
+device files (normally found in /dev directory)
+
+
+============================
+CHAPTER 2: MEMORY ADDRESSING
+============================
+
+
+====================
+CHAPTER 3: PROCESSES
+====================
+
+CREATING PROCESSES
+==================
+
+THE CLONE(), FORK(), AND VFORK() SYSTEM CALLS
+---------------------------------------------
+
+The copy_process() function
+---------------------------
+
+Task_struct has a field void *stack, I think it points to the kernel stack's bottom (or top, it's
+so confusing).
+
+In 2.6.34.7, the lightweight process (which is not a thread group leader) won't get inserted into
+the process family tree (with its sibling field) or the init_task.tasks list. It's pid is still
+inserted to PIDTYPE_PID hash table though. I got this information from reading the code.
+
+DESTROYING PROCESSES
+====================
+
+PROCESS TERMINATION
+-------------------
+
+The do_group_exit() function
+----------------------------
+
+XTRA: the function panic(char *, ...) is like blue-screen, it logs some error messages, delay a
+bit and reboot the system. BUG_ON and WARN_ON macros are for debugging the kernel (will log if
+some condition is true). BUG_ON also do a panic().
+
+XTRA: task_struct::comm is the command string of the process.

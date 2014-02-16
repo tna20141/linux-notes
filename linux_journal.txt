@@ -1,0 +1,135 @@
+
+FOREWORD
+========
+
+This journal is my personal research journal that records questions, answers, discoveries, ideas,
+opninions and similar things in the journey to understand the Linux kernel. I didn't start writing
+this journal from the beginning, but just sometime after I decided to go for the kernel. The
+journal will be very simple (at least at first). The only format to it is that I will keep track
+of time (in date) in this journal. The content will be as intuitive as possible, no formal
+structure is needed. Now this is supposed to be a (live) journal, so I'm not gonna summerize things
+I've learned so far here, because they are more suitable to be in a note.
+
+========
+
+Jul 21st 2013
+
+I started the journal today because I think it's important for the road ahead.
+
+Kinda done with the paging init, moving to actual memory management (chapter 8 of ULK).
+
+I think 64-bit architecture doesn't have ZONE_HIGHMEM because the address space that 64-bit can
+handle is just too big, thus it makes no sense to partition the RAM into many zones.
+
+Page frames are allocated in the order of 2, this might be due to the buddy system's mechanism.
+
+========
+
+Jul 22nd 2013
+
+Seems like mem_map array contains info about all page frames (fixed sized array), so the code
+__va((unsigned long)(page - mem_map)<<12) is possible. I mean the page frame index corresponds to
+the linear address.
+
+Page mapping is all about mapping a PAGE FRAME into a LINEAR ADDRESS. What is in the page frame
+depends on other things (like a loading routine or an allocation, I guess).
+
+It's often said that in x86, memory beyond the 896MB mark is high memory. I wondered if the 128MB
+beyond that belonged to high memory or still inside the kernel address space. A logical answer is
+that the 128MB of the kernel is just the LINEAR address space, not the physical one. So the 128MB
+linear address space is used by the kernel for the stuff it's supposed to be used for, and the
+128MB physical address space beyond the 896MB mark is genuine high memory.
+
+I'll come back to chapter 3 (Processes) for now. I think reading sequentially is still better.
+
+========
+
+Jul 25th 2013
+
+About handling process wait queues. The book often quotes the following code snippet:
+if (!condition)
+	schedule();
+Doesn't this contain a potential race condition? I'm pretty sure they took care of this (since this
+is big stuff), but I don't know how.
+
+========
+
+Aug 19th 2013
+
+I think a process switch doesn't need to save GPRs (general purpose registers) because (most of)
+these are preserved over a function call anyway. Other things like PGD addresses (in cr3) are stored
+in process descriptor, so no need to save them either.
+
+========
+
+Aug 27th 2013
+
+If the CLONE_THREAD flag is set, tsk->exit_signal is initialized to -1, which means that the (child)
+process won't send any signal to its parent when it terminates. This makes sense, since only the
+last member of the thread group (usually, the thread group leader) gets to send the exit signal to
+the parent. And since the CLONE_THREAD flag is specified, the in-dicussed process is inserted into
+its parent's thread group, which means it won't be a thread group leader.
+
+The interrupt handler can't use the interrupted process as its backing process (in other words,
+its "schedule agent") for rescheduling, probably because the interrupted process is already busy
+saving its states from the interrupt handler, it can't also contain the interrupt handler's states.
+It cant be thought of as follow: the interrupted process is already annoyed that the interrupt
+handler takes up its kernel stack, it won't be any kinder as to back the handler up for
+rescheduling. Also making interrupt handlers sleepable is gonna get things very much complicated.
+
+I still don't know exactly why interrupt handler can't sleep (maybe it shouldn't, but there's no
+concrete reason why it CAN'T).
+
+I think I know why. The interrupt handler has NOTHING TO DO with the process. Aside from using the
+same stack (sometimes they don't even do that), they should be as decoupled as possible. Putting
+the process to sleep because of the handler (when the process itself is perfectly runnable) is...
+bad, I supposed. So, interrupt handler shouldn't be blocked.
+
+I guess that makes Robert's explanation somewhat reasonable (with all that "no backing process" and
+"how would it reschedule?" stuff). But Daniel & Marco's "can't block because they are nested"
+doesn't seem to relate to this. Maybe they mean that an inner handler sleeping might block the outer
+handler as well, and that's not good.
+
+OK, we're done here. This is satisfying enough for me (and for now).
+
+========
+
+Sep 1st 2013
+
+I'm at the beginning of chapter 5 (about kernel preemption). I figure the kernel can allocate time
+to processes by means of hardware timer. When a timer expires, it issues an interrupt to the CPU,
+whose purpose is to inform the kernel that the allocated time is up and a new process should be
+scheduled to run next.
+
+========
+
+Sep 8th 2013
+
+DAMN! All this time I thought unlikely(cond) equals (!cond), and from
+http://stackoverflow.com/questions/109710/likely-unlikely-macros-in-the-linux-kernel it says that
+unlikely(cond) essentially means (cond). likely or unlikely is just for telling if the condition
+is likely to happen or not, it has nothing to do with the real logic. So I could've mistaken a lot
+of stuff along the way because of this. Really, damn!!!
+
+And today is her birthday...
+
+========
+
+Feb 15th 2014
+
+It's been a while since I last used this journal.
+
+I've decided that this journal is for writing logs about TODO stuff, events,... and won't include
+much (if any) technical knowledge or information. Those will be documented in other text files.
+Ok, now continues the normal logging.
+
+Tomorrow, I need to examine do_exit() code carefully.
+
+========
+
+Feb 16th 2014
+
+Will have to come back to do_exit() later, when I will have understood signals and the whole
+process structure.
+
+I created a github repos for these notes today. Just feel like doing it.
