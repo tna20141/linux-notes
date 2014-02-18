@@ -130,6 +130,9 @@ Tomorrow, I need to examine do_exit() code carefully.
 Feb 16th 2014
 
 Will have to come back to do_exit() later, when I will have understood signals and the whole
-process structure.
+process structure. In fact, I need to recrunch most of the chapter.
 
 I created a github repos for these notes today. Just feel like doing it.
+
+Never heard of the concept "pid namespace". This will be tricky. I need to look into this.
+Also, there's another feature called "control group".
