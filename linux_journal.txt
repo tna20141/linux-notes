@@ -136,3 +136,37 @@ I created a github repos for these notes today. Just feel like doing it.
 
 Never heard of the concept "pid namespace". This will be tricky. I need to look into this.
 Also, there's another feature called "control group".
+
+========
+
+Feb 18th 2014
+
+I get to know the infamous "F0 0F" bug.
+
+========
+
+Feb 22nd 2014
+
+The issue of  whether masking an interrupt line disable it for the entire system or just the local
+CPU  really bugs me. [Understanding LK] seems to say masking only disables for he local CPU, but
+[LKD] declares firmly that masking disables for all CPUs (because the line is disabled in the
+interrupt controller itself). Maybe the 2 types of masking is not the same.
+
+========
+
+Feb 25th 2014
+
+I need to draw the stack state each time I see the "saving to stack" thing.
+
+Coming back to preempt_schedule_irq() in chapter 5.
+
+========
+
+Feb 26th 2014
+
+Another problem arises. This time with workqueues. In [2.6.34.7] code, the work_func_t type is
+defined as void (*work_func_t)(struct work_struct *work), meaning it takes the hole work_struct
+as data argument. However, the books (and my thinking) say that it needs "void *data" as argument,
+and the work_struct doesn't even have a data pointer. Actually it has a field named "data", but
+this field, quote from the source "work queue pointer and the flags rolled into one". Where on
+earth could the work queue function find its data, and the hell with work_struct's data.

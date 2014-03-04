@@ -177,7 +177,7 @@ The copy_process() function
 Task_struct has a field void *stack, I think it points to the kernel stack's bottom (or top, it's
 so confusing).
 
-In 2.6.34.7, the lightweight process (which is not a thread group leader) won't get inserted into
+[2.6.34.7] The lightweight process (which is not a thread group leader) won't get inserted into
 the process family tree (with its sibling field) or the init_task.tasks list. It's pid is still
 inserted to PIDTYPE_PID hash table though. I got this information from reading the code.
 
@@ -195,3 +195,48 @@ bit and reboot the system. BUG_ON and WARN_ON macros are for debugging the kerne
 some condition is true). BUG_ON also do a panic().
 
 XTRA: task_struct::comm is the command string of the process.
+
+
+====================================
+CHAPTER 4: INTERRUPTS AND EXCEPTIONS
+====================================
+
+INTERRUPT HANDLING
+==================
+
+I/O INTERRUPT HANDLING
+----------------------
+
+The do_IRQ() function
+---------------------
+
+[2.6.34.7] The function execute_on_irq_stack() checks if it needs to switch stack. If yes, it
+does the switching, handles the interrupt, switches back to the old stack and return 1.
+Otherwise, it returns 0, and the outer function that called it will have to handle the
+interrupt. This is quite a trick. The outer function doesn't need to care about switching
+back to the old stack.
+
+Dynamic allocation of IRQ lines
+-------------------------------
+
+in __setup_irq(), the kernel checks if the IRQ line can be shared. It does so by checking that
+IROF_SHARED is set on both the new irqaction's flag and the first irqaction's flag of the irq
+description. Intuitively, the code should check the flags of all the actions sharing the IRQ line,
+but if the line is not shared then there's only 1 action in the list (and IRQF_SHARED in cleared),
+so checking together with only the first action is adequate.
+
+SOFTIRQS AND TASKLETS
+=====================
+
+SOFTIRQ
+-------
+
+The do_softirq() function
+-------------------------
+
+Even though do_sofitirq() calls local_irq_save() and local_irq_restore(), __do_softirq() calls
+local_irq_enable() and local_irq_disable() inside it. I think it's possible because the important
+thing is whether interrupt is enabled or disabled, despite how many levels depth it was disabled
+before. Also, once disabled, the concerned code section will run without disturbance, so the
+code sections won't interfere with each other and the interrupt state (saved/restored) will
+remain consistant.
