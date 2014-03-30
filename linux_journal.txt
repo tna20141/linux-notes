@@ -141,16 +141,23 @@ Also, there's another feature called "control group".
 
 Feb 18th 2014
 
-I get to know the infamous "F0 0F" bug.
+I get to know the infamous "F0 0F" bug. An example is the "F0 0F C7 C8" instruction. Basically
+it's tricking the CPU to do 2 consecutive reads when it's supposed to do a read-update-write
+instruction (with the lock prefix in action). The second read is because the instruction is
+purposefully made invalid, so an exception handler is called and the CPU tries to read its address.
+When this happens the CPU is confused and it just hangs. This bug is easily crafted, like so:
+char a[4] = {0xf0, 0x0f, 0xc7, 0xc8}; void (*f)() = a; f();
+This bug is serious as it requires no privileges. Attempts to fix this bug mostly involves
+triggering page fault, since page fault disables the lock byte.
 
 ========
 
 Feb 22nd 2014
 
 The issue of  whether masking an interrupt line disable it for the entire system or just the local
-CPU  really bugs me. [Understanding LK] seems to say masking only disables for he local CPU, but
+CPU  really bugs me. [Understanding LK] seems to say masking only disables for the local CPU, but
 [LKD] declares firmly that masking disables for all CPUs (because the line is disabled in the
-interrupt controller itself). Maybe the 2 types of masking is not the same.
+interrupt controller itself). Maybe the 2 types of masking are not the same.
 
 ========
 
@@ -170,3 +177,142 @@ as data argument. However, the books (and my thinking) say that it needs "void *
 and the work_struct doesn't even have a data pointer. Actually it has a field named "data", but
 this field, quote from the source "work queue pointer and the flags rolled into one". Where on
 earth could the work queue function find its data, and the hell with work_struct's data.
+
+========
+
+Mar 04th 2014
+
+spin_lock_irqsave() <-- I dont know if this function allows interrupt while spinning, or it
+disables interrupt (and preemption) right from the start and keep it down all the way until the
+lock is enabled. From examining the source, I would say the latter case is true.
+
+I often find that calling schedule() on a condition is not atomic. What if a condition becomes
+false right after it is checked and right before schedule() is invoked? Also, a wakeup call could
+also be missed (if the call happens right before the schedule() invocation).
+
+========
+
+Mar 08th 2014
+
+About the schedule() problem above. I assume there might be a solution for it as below. The wake
+function and schedule(), each has a section that doesn't interleave with each other. For example,
+the wake function has a section called A, schedule() has a section called B. If A occurs before B,
+schedule() will see that current is woken up by someone, so it will just clean up and return. If
+B occurs before A, schedule() has already put current to sleep, so the wakeup call won't be missed.
+Of course, I will have to examine this issue carefully later on. Especially the implementation of
+the schedule() function.
+
+-- Mar 22nd 2014 --
+This problem is now pretty clear. If wake_up*() is called before schedule(), 
+it will set state to TASK_RUNNING and schedule() won't deactivate the task if it sees this. In this
+case, schedule() will only make the task lay low for a while, the task is still on rq.
+
+========
+
+Mar 09th 2014
+
+Can't find xtime initialization in time_init() or anywhere else.
+
+========
+
+Mar 10th 2014
+
+I often find kernel routines executing payload functions that are registered. For example,
+run_timer_softirq() executing a list of functions of expired timers. Should threads be spawned to
+take care of these functions, or should they just be executed serially by the current thread for
+simplicity? And which is the approach currently taken? I'll try to look into this.
+-> in run_timer_softirq(), it just straight-up calls fn(data).
+
+========
+
+Mar 12th 2014
+
+Tomorrow's work: take a good look at all the timer interrupt handler's routines (interval timers,
+walltime update, process times, ...); examine NMI watchdog, clock time implementation.
+
+========
+
+Mar 13th 2014
+
+smp_processor_id()'s main payload is in arch/x86/include/asm/percpu.h:
+#ifdef CONFIG_X86_64
+#define __percpu_seg		gs
+#define __percpu_mov_op		movq
+#else
+#define __percpu_seg		fs
+#define __percpu_mov_op		movl
+#endif
+#define __percpu_arg(x)		"%%"__stringify(__percpu_seg)":%P" #x
+If !CONFIG_SMP then the macro will just return 0.
+
+Load average calculation is quite a complex and mathematical process. I found a pretty good 
+explanation at http://www.perfdynamics.com/CMG/CMGslides4up.pdf (saved to local). Basically its an
+exponential weighting scheme. Samples (number of running & waiting processes) are taken every 5
+seconds. The weight of each sample in the loadavg decreases along with its age. Note that, for
+x-min loadavg (x = 1, 5, 15), samples taken x minutes before don't have the weight of 0. The number
+of minutes is just an argument to the calculation (the decay rate), the weight of each sample only
+hits zero if it has exponentially decreased to zero.
+
+[2.6.34.7] has high-resolution timers, which I'll leave alone for now. It would take too much
+effort to dig in raw (without any help from books).
+
+========
+
+Mar 14th 2014
+
+In calibrate_delay(), loops_per_jiffy is initialized to (1<<12) before calculating. As how I see
+it, the calculation takes it that lpj is at least 10^12. That is A LOT of MIPS, I think, and it
+kinda bugs me! REALLY!
+
+========
+
+Mar 15th 2014
+
+IDR... You f***ing b*tch.
+First, it took me a whole lot of time.
+Second, it pissed me off. find_next_bit() (in find_next_bit.c) is messed up. It doesn't return a m
+that is equal to n.
+Incase I come back to this, http://lwn.net/Articles/175432/.
+
+-- Mar 26th 2014 --
+Will write a module to test IDR later.
+
+========
+
+Mar 19th 2014
+
+Seems like CONFIG_NO_HZ is related to system idle stuff.
+
+========
+
+Mar 20th 2014
+
+The CFS might be simple in theory, but its details are quite messy and complicated to me. In some
+places it it even inconsistent (just the presentation, it can't be technically flawed). I left out
+some details but nevertheless got the overall mechanism of the CFS.
+The one that gives me hell the most is the weighting of exec runtime!!
+
+========
+
+Mar 21st 2014
+
+Posted my first question to the kernelnewbies mailing list. I asked about the effect of nice value
+in the CFS scheduler. I wrote a simple program, running 2 instances of it with different nice 
+values (on the same CPU) to test. I expected the execution speeds would be different, but they
+seemed to be the same.
+
+========
+
+Mar 22nd 2014
+
+struct task_struct has the following priority members: int prio, static_prio, normal_prio; 
+unsigned int rt_priority. Found an OK explanation on the book Professional Linux Kernel 
+Architecture. I think I'll download it.
+
+A sample of acquiring locks in a predefined order to prevent deadlock is in double_rq_lock().
+
+========
+
+Mar 28th 2014
+
+RCU is still a mystery to me.

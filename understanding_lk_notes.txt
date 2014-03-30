@@ -1,6 +1,8 @@
 
 Book kernel version: 2.6.11
 Referenced kernel version (the main one): 2.6.34.7
+Architecture: x86 (32 bit) (64 bit if mentioned explicitly)
+
 
 
 =======================
@@ -240,3 +242,57 @@ thing is whether interrupt is enabled or disabled, despite how many levels depth
 before. Also, once disabled, the concerned code section will run without disturbance, so the
 code sections won't interfere with each other and the interrupt state (saved/restored) will
 remain consistant.
+
+
+===================
+TIMING MEASUREMENTS
+===================
+
+THE LINUX TIMEKEEPING ARCHITECTURE
+==================================
+
+TIMEKEEPING ARCHITECTURE IN UNIPROCESSOR SYSTEMS
+------------------------------------------------
+
+The timer interrupt handler
+---------------------------
+
+[2.6.34.7] The interrupt handler calls global_clock_event->event_handler(global_clock_event) (as
+payload), which goes through a myriad of initialization routines. It's not as straight-forward as
+the book describes. I've summarized the initialization as follow:
+
+tickinit() -> clockevents_register_notifier(&tick_notifier) ->
+-> tick_notifier.notifier_call = tick_notify -> tick_check_new_device(dev) ->
+-> tick_setup_device() -> tick_setup_periodic(newdev, 0) -> tick_set_periodic_handler(dev, 0) ->
+-> dev->event_handler = tick_handle_periodic
+
+so global_clock_event->event_handler(global_clock_event) will be the same as
+tick_handle_periodic(global_clock_event). This function in turn executes its payload in
+tick_periodic(cpu).
+
+
+
+
+=====
+NOTES
+=====
+
+ACTIONS THAT DISABLE/ENABLE KERNEL PREEMPTION
+=============================================
+
+- Preemption disabling - of course (preemption counter increased)
+- Interrupt handling (interrupt counter increased)
+- Local interrupt disabling (no interrupts -> no preemption)
+- Disabling softirqs and therefore tasklets (softirq counter increased)
+- Softirq/tasklet handling (softirqs will be disabled when one is handled)
+- Spin lock (explicitly disable preemption)
+- Read/write spin lock (explicitly disable preemption)
+- Seqlock (preemption disabled only by writers)
+- RCU (preemption disabled by readers)
+- Semaphore (because it calls spin_lock_irqsave())
+- Read/write semaphore (calls spin_lock_irq())
+- Completion (calls spin_locK_irqsave())
+
+Note that the opposite actions of the aboves (for example, preemption enabling, exiting interrupt
+handlers) almost always put preemption back on. Also, sometimes preemption is enabled if the action
+calls schedule() (or maybe do smt else), and then is disabled again when schedule() returns.
